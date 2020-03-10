@@ -420,7 +420,7 @@ def pytest_collection_modifyitems(items):
     def get_order_number(test):
         marker_db = test.get_closest_marker('django_db')
         if marker_db:
-            transaction = validate_django_db(marker_db)[0]
+            transaction = validate_django_db(marker_db)[1]
             if transaction is True:
                 return 1
         else:
@@ -491,7 +491,7 @@ def _django_db_marker(request):
     """
     marker = request.node.get_closest_marker("django_db")
     if marker:
-        transaction, reset_sequences = validate_django_db(marker)
+        databases, transaction, reset_sequences = validate_django_db(marker)
         if reset_sequences:
             request.getfixturevalue("django_db_reset_sequences")
         elif transaction:
@@ -573,6 +573,19 @@ def django_mail_patch_dns(monkeypatch, django_mail_dnsname):
 @pytest.fixture(scope="function")
 def django_mail_dnsname():
     return "fake-tests.example.com"
+
+
+@pytest.fixture(scope="function")
+def django_db_aliases(request):
+    from django.db import DEFAULT_DB_ALIAS
+
+    marker = request.node.get_closest_marker("django_db")
+    databases = None
+
+    if marker:
+        databases, transaction, reset_sequences = validate_django_db(marker)
+
+    return databases or {DEFAULT_DB_ALIAS}
 
 
 @pytest.fixture(autouse=True, scope="function")
@@ -796,8 +809,8 @@ def validate_django_db(marker):
     A sequence reset is only allowed when combined with a transaction.
     """
 
-    def apifun(transaction=False, reset_sequences=False):
-        return transaction, reset_sequences
+    def apifun(databases=None, transaction=False, reset_sequences=False):
+        return databases, transaction, reset_sequences
 
     return apifun(*marker.args, **marker.kwargs)
 

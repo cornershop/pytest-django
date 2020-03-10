@@ -124,7 +124,7 @@ def django_db_setup(
 
 
 def _django_db_fixture_helper(
-    request, django_db_blocker, transactional=False, reset_sequences=False
+    request, django_db_blocker, databases, transactional=False, reset_sequences=False
 ):
     if is_django_unittest(request):
         return
@@ -148,8 +148,18 @@ def _django_db_fixture_helper(
     else:
         from django.test import TestCase as django_case
 
+    def restore_databases(cls, dbs):
+        cls.databases = dbs
+
+    old_databases = getattr(django_case, "databases", None)
+    setattr(django_case, "databases", databases)
+
     test_case = django_case(methodName="__init__")
     test_case._pre_setup()
+
+    request.addfinalizer(
+        partial(restore_databases, cls=django_case, dbs=old_databases)
+    )
     request.addfinalizer(test_case._post_teardown)
 
 
@@ -188,10 +198,8 @@ def _set_suffix_to_test_databases(suffix):
 
 
 # ############### User visible fixtures ################
-
-
 @pytest.fixture(scope="function")
-def db(request, django_db_setup, django_db_blocker):
+def db(request, django_db_aliases, django_db_setup, django_db_blocker):
     """Require a django test database.
 
     This database will be setup with the default fixtures and will have
@@ -213,11 +221,11 @@ def db(request, django_db_setup, django_db_blocker):
     ):
         request.getfixturevalue("transactional_db")
     else:
-        _django_db_fixture_helper(request, django_db_blocker, transactional=False)
+        _django_db_fixture_helper(request, django_db_blocker, django_db_aliases, transactional=False)
 
 
 @pytest.fixture(scope="function")
-def transactional_db(request, django_db_setup, django_db_blocker):
+def transactional_db(request, django_db_aliases, django_db_setup, django_db_blocker):
     """Require a django test database with transaction support.
 
     This will re-initialise the django database for each test and is
@@ -232,11 +240,11 @@ def transactional_db(request, django_db_setup, django_db_blocker):
     """
     if "django_db_reset_sequences" in request.fixturenames:
         request.getfixturevalue("django_db_reset_sequences")
-    _django_db_fixture_helper(request, django_db_blocker, transactional=True)
+    _django_db_fixture_helper(request, django_db_blocker, django_db_aliases, transactional=True)
 
 
 @pytest.fixture(scope="function")
-def django_db_reset_sequences(request, django_db_setup, django_db_blocker):
+def django_db_reset_sequences(request, django_db_aliases, django_db_setup, django_db_blocker):
     """Require a transactional test database with sequence reset support.
 
     This behaves like the ``transactional_db`` fixture, with the addition
@@ -249,7 +257,7 @@ def django_db_reset_sequences(request, django_db_setup, django_db_blocker):
     ``transactional_db``, ``django_db_reset_sequences``.
     """
     _django_db_fixture_helper(
-        request, django_db_blocker, transactional=True, reset_sequences=True
+        request, django_db_blocker, django_db_aliases, transactional=True, reset_sequences=True
     )
 
 
