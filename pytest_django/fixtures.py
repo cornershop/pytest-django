@@ -156,10 +156,12 @@ def _django_db_fixture_helper(
 
     test_case = django_case(methodName="__init__")
     test_case._pre_setup()
+    test_case.setUpClass()
 
     request.addfinalizer(
         partial(restore_databases, cls=django_case, dbs=old_databases)
     )
+    request.addfinalizer(test_case.tearDownClass)
     request.addfinalizer(test_case._post_teardown)
 
 
